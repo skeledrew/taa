@@ -148,7 +148,7 @@ def gradeAss(workDir, gradesPath, assType):
                 subAtts = fileList(studDirPath + 'Submission attachment(s)', fullpath=True)
                 feedText = loadText(studDirPath + 'feedbackText.html')
                 feedAtts = fileList(studDirPath + 'Feedback Attachment(s)', fullpath=True)
-                comments = loadText(studDirPath + 'comments.txt')
+                commFile = studDirPath + 'comments.txt'
 
                 while True:
                     msg = 'Select an action to perform on %s\'s assignment' % student
@@ -175,17 +175,16 @@ def gradeAss(workDir, gradesPath, assType):
                         continue
 
                     if act == ASS_ACTIONS[4]:
-                        comments = editComm(comments)
-                        saveText(comments, studDirPath + 'comments.txt')
+                        editComm(commFile)
                         continue
 
                     if act == ASS_ACTIONS[5]:
                         # calculate grade from comments and record
                         studGrade = maxGrade
+                        comments = loadText(commFile)
 
                         for comm in comments.split(COMM_SEP):
                             # tally grade points
-
 
                             if comm[-1] in [str(i) for i in range(10)] and int(comm.split(' ')[-1]) == 0:
                                 # overall grade is 0
@@ -275,18 +274,18 @@ def viewAtts(attDir):
             # invoke editor
 
             if ext == 'java':
-                results = handleJava(fullPath)
+                results = handleJava(fullPath, commFile='/'.join(attDir[0].split('/')[:-2]) + '/comments.txt')
                 continue
 
         else:
             # prompt for viewer
             pass
 
-def handleJava(path):
+def handleJava(path, commFile):
     results = {}
     fName = path.split('/')[-1]
     options = ['!quit!', 'Compile %s' % fName, 'View %s inline' % fName, 'View %s in Kate' % fName]
-    options += ['Run %s' % fName.split('.')[0] + '.class', 'Analyze %s' % fName]
+    options += ['Run %s' % fName.split('.')[0] + '.class', 'Analyze %s' % fName, 'Edit comments']
 
     while True:
         act = getChoice(options)
@@ -310,6 +309,7 @@ def handleJava(path):
 
         if act == options[2]:
             print('\n\n%s\n\n' % loadText(path))
+            input('Press any key to continue')
 
         if act == options[3]:
             print('Opening %s in Kate' % fName)
@@ -318,10 +318,11 @@ def handleJava(path):
         if act == options[4]:
             # Run the class file
             print('Running %s' % fName.split('.')[0])
-            child = pexpect.spawnu('java -cp "%s" %s' % ('/'.join(path.split('/')[:-1]), fName.split('.')[0]), timeout=15)
+            child = pexpect.spawnu('java -cp "%s" %s' % ('/'.join(path.split('/')[:-1]), fName.split('.')[0]), timeout=5)
             child.logfile = open('temp.out', 'wb')
             child.expect(['', pexpect.TIMEOUT, pexpect.EOF])
             child.logfile.close()
+            child.logfile = None
             print(loadText('temp.out'))
 
             try:
@@ -330,6 +331,7 @@ def handleJava(path):
             except Exception as e:
                 print('Interaction with %s failed. Maybe it exited?' % fName.split('.')[0])
                 print('Error detail: ' + str(e))
+            #child.logfile.close()
 
             '''while True:
                 child.logfile_send = open('temp.out', 'wb')
@@ -346,10 +348,16 @@ def handleJava(path):
 
         if act == options[5]:
             print('Not yet implemented!')
+            continue
+
+        if act == options[6]:
+            editComm(commFile, ASS_TYPES[1], fName)
+            continue
     return results
 
-def editComm(comments):
+def editComm(commFile, assType='', fName=''):
     globalComments = loadText(BASE_PATH + 'Comments.txt').split('\n')
+    comments = loadText(commFile)
     localComments = []
 
     if COMM_SEP in comments:
@@ -377,7 +385,7 @@ def editComm(comments):
         comments = []
 
     while True:
-        localComments = ['!quit!', '!add new comment!']
+        localComments = ['!quit!', '!add new comment!', '!view current comments!']
 
         for comm in globalComments:
             # create format to add and remove comments
@@ -386,7 +394,7 @@ def editComm(comments):
                 # zap empty lines; TODO: figure out what's causing them
                 continue
 
-            if comm in comments:
+            if comm in comments or (assType == ASS_TYPES[1] and '%s: %s' % (fName, comm) in comments):
                 localComments.append('[del] ' + comm)
 
             else:
@@ -409,11 +417,20 @@ def editComm(comments):
         elif act == localComments[1]:
             # add new comment
             newComment = input('Enter new comment: ').strip()
+
+            if assType == ASS_TYPES[1] and not fName == '':
+                # prepend the file name
+                newComment = '%s: %s' % (fName, newComment)
             globalComments.append(newComment)
             comments.append(newComment)
 
+        elif act == localComments[2]:
+            print('\n\n%s\n\n' % '\n'.join(comments))
+            input('Press any key to continue')
+
     if not comments == []:
         comments.append(TA_SIG)
+    saveText(COMM_SEP.join(comments), commFile)
     return COMM_SEP.join(comments)
 
 def main():
