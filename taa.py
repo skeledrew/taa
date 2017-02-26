@@ -62,16 +62,20 @@ def saveText(text, path):
         elif type(text) == type(''):
             f.write(text)
 
-def getChoice(optsList, msg='', ret='string'):
+def getChoice(optsList, msg='', ret='string', pageSize=-1):
 
     if msg == '':
         msg = 'Choose an option:'
     print('\n' + msg)
-
-    for idx in range(len(optsList)):
-        print(str(idx) + ': ' + optsList[idx])
+    page = 1
 
     while True:
+
+        for idx in range(len(optsList)):
+            print(str(idx) + ': ' + optsList[idx])
+
+        if pageSize > 0:
+            pass
 
         try:
             choice = int(input('>> '))
@@ -258,13 +262,13 @@ def viewAtts(attDir):
 
             if ext == 'doc' or ext == 'docx' or ext == 'rtf':
                 print('Opening %s in WPS Office' % choice)
-                child = pexpect.spawn('wps "' + fullPath + '"')
+                child = pexpect.spawn('wps "%s"' % fullPath)
                 child.expect('')
                 continue
 
             if ext == 'pdf':
                 print('Opening %s in Okular' % choice)
-                child = pexpect.spawn('okular ' + fullPath)
+                child = pexpect.spawn('okular "%s"' % fullPath)
                 child.expect('')
                 continue
 
