@@ -190,13 +190,18 @@ def gradeAss(workDir, gradesPath, assType):
                         for comm in comments.split(COMM_SEP):
                             # tally grade points
 
-                            if comm[-1] in [str(i) for i in range(10)] and int(comm.split(' ')[-1]) == 0:
+                            '''if comm[-1] in [str(i) for i in range(10)] and int(comm.split(' ')[-1]) == 0:
                                 # overall grade is 0
                                 studGrade = 0
-                                break
+                                break'''
 
                             if comm[-1] in [str(i) for i in range(10)]:
                                 # comment includes grade affecting info
+                                modifier = int(comm.split(' ')[-1])
+
+                                if modifier == 0:
+                                    studGrade = 0
+                                    break
                                 studGrade += int(comm.split(' ')[-1])
 
                         for idx in range(len(grades)):
@@ -321,20 +326,29 @@ def handleJava(path, commFile):
 
         if act == options[4]:
             # Run the class file
-            print('Running %s' % fName.split('.')[0])
-            child = pexpect.spawnu('java -cp "%s" %s' % ('/'.join(path.split('/')[:-1]), fName.split('.')[0]), timeout=5)
-            child.logfile = open('temp.out', 'wb')
-            child.expect(['', pexpect.TIMEOUT, pexpect.EOF])
-            child.logfile.close()
-            child.logfile = None
-            print(loadText('temp.out'))
+            classFile = fName.split('.')[0]
+            mode = getChoice(['interactive', 'dumb'], msg='Select a mode to run %s' % classFile)
+            print('Running %s in %s mode' % (classFile, mode))
 
-            try:
-                child.interact()
+            if mode == 'dumb':
+                # no input expected
+                child = pexpect.spawnu('java -cp "%s" %s' % ('/'.join(path.split('/')[:-1]), fName.split('.')[0]), timeout=5)
+                child.logfile_send = open('temp.out', 'wb')
+                child.expect([pexpect.TIMEOUT, pexpect.EOF])
+                child.logfile_send.close()
+                child.logfile_send = None
+                print(loadText('temp.out'))
 
-            except Exception as e:
-                print('Interaction with %s failed. Maybe it exited?' % fName.split('.')[0])
-                print('Error detail: ' + str(e))
+            else:
+                # interact with user
+                child = pexpect.spawnu('java -cp "%s" %s' % ('/'.join(path.split('/')[:-1]), fName.split('.')[0]))
+
+                try:
+                    child.interact()
+
+                except Exception as e:
+                    print('Interaction with %s failed. Maybe it exited?' % fName.split('.')[0])
+                    print('Error detail: ' + str(e))
             #child.logfile.close()
 
             '''while True:
