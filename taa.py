@@ -89,12 +89,13 @@ def getChoice(optsList, msg='', ret='string', pageSize=-1):
 
 
 def prepAss(path):
-    workDir = path + getChoice(fileList(path), msg='Select assignments folder:')
+    workDir = path + getChoice(['!quit!'] + fileList(path), msg='Select assignments folder:')
+    if '!quit!' in workDir: return '', '', '!quit!'
     print('Assignments at ' + workDir)
     gradesPath = workDir + '/grades.csv'# + getChoice(fileList(workDir), 'Select grades file:')
     print('Grades file is ' + gradesPath)
-    assType = getChoice(ASS_TYPES)
-    print('Assignment type is ' + assType)
+    assType = getChoice(['!quit!', '!back!'] + ASS_TYPES)
+    if not '!' in assType: print('Assignment type is ' + assType)
     return workDir, gradesPath, assType
 
 def gradeAss(workDir, gradesPath, assType):
@@ -373,6 +374,10 @@ def handleJava(path, commFile):
             continue
     return results
 
+def handleArchive(path):
+    ## actions are list and extract
+    pass
+
 def editComm(commFile, assType='', fName=''):
     globalComments = loadText(BASE_PATH + 'Comments.txt').split('\n')
     comments = loadText(commFile)
@@ -452,8 +457,13 @@ def editComm(commFile, assType='', fName=''):
     return COMM_SEP.join(comments)
 
 def main():
-    workDir, gradesPath, assType = prepAss(BASE_PATH)
-    gradeAss(workDir, gradesPath, assType)
+
+    while True:
+        workDir, gradesPath, assType = prepAss(BASE_PATH)
+        if assType == '!back!': continue
+        if assType == '!quit!': break
+        gradeAss(workDir, gradesPath, assType)
+    print('Program terminated')
 
 if __name__ == '__main__':
     main()
