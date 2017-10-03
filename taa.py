@@ -3,22 +3,31 @@
 
 '''
 Teacher Assistant\'s Assistant
+
+To Do:
+- Unzip downloads and rezip uploads
 '''
 
 import pexpect
 import pickle
 import os, sys
+import pdb
+import csv
+import re
 
 
-BASE_PATH = '/home/skeledrew/Edu/LUC/Spring 2017/TA/COMP 170/'
-ASS_TYPES = ['mpl', 'jfiles', 'quiz', 'jproj']
+BASE_PATH = './'
+ASS_TYPES = ['python', 'mpl', 'jfiles', 'quiz', 'jproj']
 ASS_ACTIONS = ['View submission text', 'View submission attachments', 'View feedback attachments', 'View feedback text', 'View and edit comments', 'Grade assignment']
 DOC_TYPES = ['doc', 'docx', 'pdf', 'odt', 'rtf', 'wps']
 IMG_TYPES = ['png', 'bmp', 'gif', 'jpg', 'jpeg']
 SRC_TYPES = ['java', 'c', 'cpp', 'cs', 'py']
 ARC_TYPES = ['zip', 'tar', 'gz']
+JUP_TYPES = ['ipynb']  # Jupyter notebook
+TXT_TYPES = ['txt', 'md']
 COMM_SEP = ' | '
 TA_SIG = '- Andrew_'
+FIELD_SEP = '\t'
 
 
 def pickleLoad(fName):
@@ -87,6 +96,14 @@ def getChoice(optsList, msg='', ret='string', pageSize=-1):
         except:
             print('Invalid input')
 
+def saveCsv(lines, path):
+
+    with open(path, 'w') as fo:
+        _writer = csv.writer(fo)
+
+        for line in lines:
+            _writer.writerow(line)
+
 
 def prepAss(path):
     workDir = path + getChoice(['!quit!'] + fileList(path), msg='Select assignments folder:')
@@ -111,36 +128,35 @@ def gradeAss(workDir, gradesPath, assType):
             studDirs.remove(studDir)
 
     with open(gradesPath) as fo:
-        # load grades file; should prob just use loadText...
+        # load grades file
+        grade_reader = csv.reader(fo)
 
-        for line in fo:
-            grades.append(line.strip())  # remove newline
+        for line in grade_reader:
+            grades.append(line)  # remove newline
     studIDs.append('!quit!')
 
-    for idx in range(len(grades)):
+    for idx in range(3, len(grades)):
         # get the IDs
 
-        if idx < 3:
-            continue  # to the first student
-
-        if grades[idx] == '':
+        if not grades[idx]:
             continue  # should actually break out, but...
-        entry = grades[idx].split(',')
+        entry = grades[idx]
 
-        if not len(entry) == 5:
-            raise Exception('Error: Field size mismatch')
-        lastGrade = ' [--]' if entry[-1] == '""' else ' [' + entry[-1][1:-1] + ']'
-        studIDs.append(entry[1][1:-1] + lastGrade)  # grab the id and grade info
+        if not len(entry) == 7:
+            raise ValueError('Field size mismatch: {} is size {}'.format(str(entry), len(entry)))
+        lastGrade = '[---]' if not entry[4] else '[{}]'.format(entry[4].rjust(3, ' '))
+        studIDs.append('{}{}{}'.format(entry[1], FIELD_SEP, lastGrade))  # grab the id and grade info
     maxGrade = int(input('Enter the maximum grade students can get for %s: ' % workDir.split('/')[-1]))
 
     while True:
         # work on assignments
         student = getChoice(studIDs, msg='Select student to work with:')
-        if ' ' in student: student = student.split(' ')[0]
+        if FIELD_SEP in student: student = student.split(FIELD_SEP)[0]
 
         if student == '!quit!':
             print('Exiting grading session')
             break
+        #pdb.set_trace()
 
         for studDir in studDirs:
             # search students
@@ -149,9 +165,9 @@ def gradeAss(workDir, gradesPath, assType):
                 # find the correct student directory via ID
                 # NB: all parts of the assignment must be batch downloaded!
                 studDirPath = workDir + '/' + studDir + '/'
-                subText = loadText(studDirPath + studDir + '_submissionText.html')
+                subText = 'N/A'#loadText(studDirPath + studDir + '_submissionText.html')
                 subAtts = fileList(studDirPath + 'Submission attachment(s)', fullpath=True)
-                feedText = loadText(studDirPath + 'feedbackText.html')
+                feedText = 'N/A'#loadText(studDirPath + 'feedbackText.html')
                 feedAtts = fileList(studDirPath + 'Feedback Attachment(s)', fullpath=True)
                 commFile = studDirPath + 'comments.txt'
 
@@ -191,35 +207,30 @@ def gradeAss(workDir, gradesPath, assType):
                         for comm in comments.split(COMM_SEP):
                             # tally grade points
 
-                            '''if comm[-1] in [str(i) for i in range(10)] and int(comm.split(' ')[-1]) == 0:
-                                # overall grade is 0
-                                studGrade = 0
-                                break'''
-
-                            if comm[-1] in [str(i) for i in range(10)]:
+                            if comm[-1].isdigit():
                                 # comment includes grade affecting info
                                 modifier = int(comm.split(' ')[-1])
 
                                 if modifier == 0:
                                     studGrade = 0
                                     break
-                                studGrade += int(comm.split(' ')[-1])
+                                studGrade += modifier
 
                         for idx in range(len(grades)):
                             # record grade
 
-                            if '"' + student + '"' in grades[idx]:
-                                lastGrade = grades[idx].split(',')[-1][1:-1]
-                                print('Changed %s\'s grade from %s to %s' % (student, lastGrade, str(studGrade)))
-                                studGrade = '"' + str(studGrade) + '"'
-                                grades[idx] = ','.join(grades[idx].split(',')[:-1] + [studGrade])
-                                saveText(grades, gradesPath)
+                            if student in grades[idx]:
+                                lastGrade = grades[idx][4]
+                                print('Changed %s\'s grade from %s to %s' % (student, lastGrade or 0, str(studGrade)))
+                                studGrade = str(studGrade).rjust(3, ' ')
+                                grades[idx][4] = studGrade.lstrip(' ')
+                                saveCsv(grades, gradesPath)
 
                         for idx in range(len(studIDs)):
                             # update student menu printable with new grade
 
                             if student in studIDs[idx]:
-                                studIDs[idx] = studIDs[idx].split(' ')[0] + ' [' + studGrade[1:-1] + ']'
+                                studIDs[idx] = '{}{}[{}]'.format(studIDs[idx].split(FIELD_SEP)[0], FIELD_SEP, studGrade)
 
                     if assType == 'mpl':
                         grade = gradeMPL(act, subText, subAtts, feedText, feedAtts, comments)
@@ -232,6 +243,9 @@ def gradeAss(workDir, gradesPath, assType):
 
                     if assType == 'jproj':
                         grade = gradeJProject(act, subText, subAtts, feedText, feedAtts, comments)
+
+                    if assType == 'python':
+                        grade = gradePython(act, subText, subAtts, feedText, feedAtts, comments)
 
 def gradeMPL(act, sT, sA, fT, fA, com):
 
@@ -247,11 +261,15 @@ def gradeQuiz(act, sT, sA, fT, fA, com):
 def gradeJProject(act, sT, sA, fT, fA, com):
     pass
 
+def gradePython(act, sT, sA, fT, fA, com):
+    pass
+
 def viewText(text):
     # should choose in line or web browser based on length
     print('File text: ' + text)
 
 def viewAtts(attDir):
+    main_dir = os.getcwd()
 
     while True:
         choice = getChoice(['!quit!'] + [att.split('/')[-1] for att in attDir], msg='Select file to view:')
@@ -287,9 +305,94 @@ def viewAtts(attDir):
                 results = handleJava(fullPath, commFile='/'.join(attDir[0].split('/')[:-2]) + '/comments.txt')
                 continue
 
+            elif ext == 'py':
+                results = handlePython(fullPath)
+                continue
+
+        elif ext in JUP_TYPES:
+            print('Please launch Jupyter and browse to this file')
+
+        elif ext in ARC_TYPES:
+
+            if ext == 'zip':
+                out = pexpect.run('unzip "{}" -d {}'.format(fullPath, os.path.dirname(fullPath)))
+                print(out)
+
+        elif ext in TXT_TYPES:
+            print('\n\nViewing {}:\n{}\n\n'.format(fullPath, loadText(fullPath)))
+            input('Press enter to continue')
+
         else:
             # prompt for viewer
             pass
+    os.chdir(main_dir)
+
+def handlePython(path):
+    results = {}
+    f_name = path.split('/')[-1]
+    options = ['!quit!', 'View {} inline'.format(f_name), 'View {} in Kate'.format(f_name), 'Run {} with Py3'.format(f_name), 'Run with Py2']
+    os.chdir(os.path.dirname(path))
+
+    while True:
+        act = getChoice(options)
+
+        if act == '!quit!':
+            print('Leaving Python management')
+            break
+
+        if act == options[1]:
+            print('\n\n%s\n\n' % loadText(path))
+            input('Press any key to continue')
+
+        if act == options[2]:
+            print('Opening %s in Kate' % f_name)
+            pexpect.run('kate "%s"' % path)
+
+        if act == options[3]:
+            # Run the class file
+            #matches = pexpect.run('/bin/bash "cat \"{}\" |grep \'\s*:?\s*print\s*(\'"'.format(path))
+            interp = 'python3' #if matches else 'python2'
+            #print('Running with {} because found {}'.format(interp, matches))
+            child = pexpect.spawnu('{} "{}"'.format(interp, path))
+            child.logfile_send = open('temp.out', 'wb')
+            child.interact()
+            child.logfile_send.close()
+            out = loadText('temp.out')
+            print(out)
+
+        if act == options[4]:
+            #if not 'SyntaxError:' in out: return
+            #print('Falling to python2 because:- {}\n\n'.format(out))
+            child = pexpect.spawnu('{} "{}"'.format('python2', path))
+            child.logfile_send = open('temp.out', 'wb')
+            child.interact()
+            child.logfile_send.close()
+            out = loadText('temp.out')
+            print(out)
+            return
+            classFile = fName.split('.')[0]
+            mode = getChoice(['interactive', 'dumb'], msg='Select a mode to run %s' % classFile)
+            print('Running %s in %s mode' % (classFile, mode))
+
+            if mode == 'dumb':
+                # no input expected
+                child = pexpect.spawnu('java -cp "%s" %s' % ('/'.join(path.split('/')[:-1]), fName.split('.')[0]), timeout=5)
+                child.logfile_send = open('temp.out', 'wb')
+                child.expect([pexpect.TIMEOUT, pexpect.EOF])
+                child.logfile_send.close()
+                child.logfile_send = None
+                print(loadText('temp.out'))
+
+            else:
+                # interact with user
+                child = pexpect.spawnu('java -cp "%s" %s' % ('/'.join(path.split('/')[:-1]), fName.split('.')[0]))
+
+                try:
+                    child.interact()
+
+                except Exception as e:
+                    print('Interaction with %s failed. Maybe it exited?' % fName.split('.')[0])
+                    print('Error detail: ' + str(e))
 
 def handleJava(path, commFile):
     results = {}
@@ -459,11 +562,16 @@ def editComm(commFile, assType='', fName=''):
 def main():
 
     while True:
-        workDir, gradesPath, assType = prepAss(BASE_PATH)
+        workDir, gradesPath, assType = prepAss(os.getcwd() + '/' if not len(sys.argv) > 1 else sys.argv[1])
         if assType == '!back!': continue
         if assType == '!quit!': break
         gradeAss(workDir, gradesPath, assType)
     print('Program terminated')
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+
+    except Exception as e:
+        print(repr(e))
+        pdb.post_mortem()
